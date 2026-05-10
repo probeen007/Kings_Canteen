@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes scan {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(224px); } /* 56 * 4 = h-56 equivalent */
+}
+
+.animate-scan {
+  animation: scan 2s ease-in-out infinite;
+}

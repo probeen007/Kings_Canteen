@@ -1,0 +1,25 @@
+export const QUEUE_EXPIRY_HOURS = 24;
+export const MAX_ITEMS_PER_ORDER = 20;
+export const TOKEN_EXPIRY_MINUTES = 120;
+
+export const ORDER_STATUS = {
+	PENDING: "PENDING",
+	CONFIRMED: "CONFIRMED",
+	PREPARING: "PREPARING",
+	READY: "READY",
+	COMPLETED: "COMPLETED",
+	CANCELLED: "CANCELLED",
+} as const;
+
+export const USER_ROLES = {
+	USER: "USER",
+	STAFF: "STAFF",
+	ADMIN: "ADMIN",
+} as const;
+
+export const PAYMENT_STATUS = {
+	PENDING: "PENDING",
+	SUCCESS: "SUCCESS",
+	FAILED: "FAILED",
+	REFUNDED: "REFUNDED",
+} as const;
