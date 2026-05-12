@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchWithRetry } from "@/lib/fetcher";
 
 import { CategoryFilter } from "@/components/menu/CategoryFilter";
 import { MenuCard } from "@/components/menu/MenuCard";
@@ -144,7 +145,7 @@ export function MenuBrowser() {
       }
 
       try {
-        const response = await fetch(`/api/menu?summary=1`, { cache: "no-store" });
+        const response = await fetchWithRetry(`/api/menu?summary=1`, { cache: "no-store" });
         if (!response.ok) {
           throw new Error("menu-summary");
         }
@@ -179,7 +180,7 @@ export function MenuBrowser() {
       const cached = readMenuCache<MenuItemsPage>(`${MENU_ITEMS_CACHE_PREFIX}${slug}`);
       if (cached) return cached;
     }
-    const response = await fetch(`/api/menu?${params.toString()}`, { cache: "no-store" });
+    const response = await fetchWithRetry(`/api/menu?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error("menu-items");
     }

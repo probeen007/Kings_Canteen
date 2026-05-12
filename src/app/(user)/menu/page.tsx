@@ -13,6 +13,21 @@ const sora = Sora({
   weight: ["400", "500", "600", "700"],
 });
 
+async function withRetry<T>(fn: () => Promise<T>, attempts = 2, delayMs = 150): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export default async function Page() {
   const session = await auth();
   let recentOrders: Array<{
@@ -26,18 +41,20 @@ export default async function Page() {
 
   if (session?.user?.id) {
     try {
-      const orders = await prisma.order.findMany({
-        where: { userId: session.user.id },
-        orderBy: { createdAt: "desc" },
-        take: 4,
-        select: {
-          id: true,
-          orderNumber: true,
-          status: true,
-          totalAmount: true,
-          createdAt: true,
-        },
-      });
+      const orders = await withRetry(() =>
+        prisma.order.findMany({
+          where: { userId: session.user.id },
+          orderBy: { createdAt: "desc" },
+          take: 4,
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+        })
+      );
       recentOrders = orders.map((order) => ({
         ...order,
         totalAmount: Number(order.totalAmount),

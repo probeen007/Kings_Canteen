@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchWithRetry } from "@/lib/fetcher";
 import type { Order } from "@/types/order";
 
 const CACHE_KEY = "orders:cache:v1";
@@ -37,7 +38,7 @@ function writeCache(orders: Order[], version?: string) {
 
 async function fetchVersion() {
   try {
-    const response = await fetch("/api/orders/version", {
+    const response = await fetchWithRetry("/api/orders/version", {
       cache: "no-store",
       credentials: "include",
     });
@@ -87,7 +88,7 @@ export function useOrders() {
     try {
       if (fetchingRef.current) return;
       fetchingRef.current = true;
-      const response = await fetch("/api/orders", {
+      const response = await fetchWithRetry("/api/orders", {
         cache: "no-store",
         credentials: "include",
       });

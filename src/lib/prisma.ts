@@ -23,7 +23,7 @@ const resolveDatasourceUrl = () => {
 	const disablePreparedStatements =
 		process.env.DISABLE_PREPARED_STATEMENTS === "true" || process.env.NODE_ENV === "development";
 
-	if (disablePreparedStatements) {
+	if (disablePreparedStatements || isPooler) {
 		parsed.searchParams.set("pgbouncer", "true");
 		parsed.searchParams.set("statement_cache_size", "0");
 	}
