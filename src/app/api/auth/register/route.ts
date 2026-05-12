@@ -5,6 +5,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/redis";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const passwordSchema = z
   .string()
   .min(8)
