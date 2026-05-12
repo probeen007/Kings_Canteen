@@ -55,6 +55,7 @@ const publicEnvResult = publicSchema.safeParse({
 });
 
 if (!publicEnvResult.success) {
+  console.error("Missing/invalid public env vars:", publicEnvResult.error.flatten().fieldErrors);
   throw new Error(
     "Invalid public environment variables: " +
       JSON.stringify(publicEnvResult.error.flatten().fieldErrors)
@@ -62,6 +63,7 @@ if (!publicEnvResult.success) {
 }
 
 if (typeof window === "undefined" && !serverEnvResult.success) {
+  console.error("Missing/invalid server env vars:", serverEnvResult.error.flatten().fieldErrors);
   throw new Error(
     "Invalid server environment variables: " +
       JSON.stringify(serverEnvResult.error.flatten().fieldErrors)
