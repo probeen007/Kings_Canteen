@@ -5,26 +5,29 @@ const serverSchema = z.object({
   DIRECT_URL: z.string().min(1),
   NEXTAUTH_SECRET: z.string().min(32),
   NEXTAUTH_URL: z.string().url(),
-  UPSTASH_REDIS_REST_URL: z.string().url(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().min(1),
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   JWT_SECRET: z.string().min(32),
   ESEWA_SECRET_KEY: z.string().min(1),
   ESEWA_MERCHANT_CODE: z.string().min(1),
   ESEWA_BASE_URL: z.string().url(),
   ESEWA_VERIFY_URL: z.string().url().optional(),
-  SPARROW_SMS_TOKEN: z.string().min(1),
-  SPARROW_SMS_FROM: z.string().min(1),
-  VAPID_PUBLIC_KEY: z.string().min(1),
-  VAPID_PRIVATE_KEY: z.string().min(1),
-  VAPID_EMAIL: z.string().email(),
+  SPARROW_SMS_TOKEN: z.string().min(1).optional(),
+  SPARROW_SMS_FROM: z.string().min(1).optional(),
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  VAPID_EMAIL: z.string().email().optional(),
 });
 
 const publicSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().min(1),
-  NEXT_PUBLIC_SOCKET_URL: z.string().url(),
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  NEXT_PUBLIC_SOCKET_URL: z.string().url().optional(),
+}).partial({
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: true,
+  NEXT_PUBLIC_SOCKET_URL: true,
 });
 
 const serverEnvResult = serverSchema.safeParse({
