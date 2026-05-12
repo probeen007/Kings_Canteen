@@ -23,6 +23,7 @@ export type Order = {
 	status: OrderStatus;
 	totalAmount: number;
 	pickupTime: string;
+	isAsap: boolean;
 	queuePosition: number | null;
 	items: OrderItem[];
 	paymentStatus: PaymentStatus;

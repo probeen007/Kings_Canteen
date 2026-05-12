@@ -52,6 +52,14 @@ export function formatNPR(amount: Decimal.Value) {
   return `Rs. ${formatter.format(new Decimal(amount).toNumber())}`;
 }
 
+export function formatPrice(amount: Decimal.Value) {
+  return formatNPR(amount);
+}
+
+export function formatDate(value: Date) {
+  return format(value, "MMM d, hh:mm a");
+}
+
 type TotalItem = { quantity: number; unitPrice: Decimal.Value };
 
 export function calculateTotal(items: TotalItem[]) {

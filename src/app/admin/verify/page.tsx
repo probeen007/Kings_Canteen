@@ -86,7 +86,12 @@ export default function VerifyPage() {
   // Uses a stable canvas ref so we don't recreate it every tick
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  if (!canvasRef.current) canvasRef.current = document.createElement("canvas");
+
+  useEffect(() => {
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement("canvas");
+    }
+  }, []);
 
   const startScanLoop = useCallback(() => {
     stopRaf();

@@ -54,29 +54,44 @@ globalForRedis.redis = redisClient;
 
 export const redis = redisClient;
 
-export async function rateLimit(key: string, maxRequests: number, windowSeconds: number) {
-try {
-	const count = await redis.incr(key);
-	if (count === 1) {
-		await redis.expire(key, windowSeconds);
+const fallbackRateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function fallbackRateLimit(key: string, maxRequests: number, windowSeconds: number) {
+	const now = Date.now();
+	const existing = fallbackRateLimitStore.get(key);
+	if (!existing || existing.resetAt <= now) {
+		const resetAt = now + windowSeconds * 1000;
+		fallbackRateLimitStore.set(key, { count: 1, resetAt });
+		return { allowed: true, remaining: maxRequests - 1, resetAt };
 	}
-
-	const ttl = await redis.ttl(key);
-	const resetAt = Date.now() + Math.max(ttl, 0) * 1000;
-
+	const count = existing.count + 1;
+	existing.count = count;
 	return {
 		allowed: count <= maxRequests,
 		remaining: Math.max(0, maxRequests - count),
-		resetAt,
-	};
-} catch (error) {
-	console.error("rateLimit failed, allowing request", error);
-	return {
-		allowed: true,
-		remaining: maxRequests,
-		resetAt: Date.now() + windowSeconds * 1000,
+		resetAt: existing.resetAt,
 	};
 }
+
+export async function rateLimit(key: string, maxRequests: number, windowSeconds: number) {
+	try {
+		const count = await redis.incr(key);
+		if (count === 1) {
+			await redis.expire(key, windowSeconds);
+		}
+
+		const ttl = await redis.ttl(key);
+		const resetAt = Date.now() + Math.max(ttl, 0) * 1000;
+
+		return {
+			allowed: count <= maxRequests,
+			remaining: Math.max(0, maxRequests - count),
+			resetAt,
+		};
+	} catch (error) {
+		console.error("rateLimit failed, using fallback limiter", error);
+		return fallbackRateLimit(key, maxRequests, windowSeconds);
+	}
 }
 
 export async function getQueuePosition(pickupSlot: string, expirySeconds = 24 * 60 * 60) {
@@ -100,7 +115,7 @@ await redis.set(key, data, { ex: ttlSeconds });
 
 export async function getOrderCache<T>(orderId: string) {
 const key = `order:${orderId}`;
-return redis.get<T>(key);
+return (await redis.get(key)) as T | null;
 }
 
 export async function invalidateOrderCache(orderId: string) {

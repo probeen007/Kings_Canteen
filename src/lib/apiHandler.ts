@@ -12,6 +12,7 @@ type HandlerContext<T> = {
   requestId: string;
   user: { id: string; role: Role } | null;
   body: T | null;
+  params?: Record<string, string>;
 };
 
 type HandlerOptions<T> = {
@@ -20,11 +21,13 @@ type HandlerOptions<T> = {
   requireAuth?: boolean;
 };
 
+type RouteContext = { params?: Record<string, string> | Promise<Record<string, string>> };
+
 export function apiHandler<TBody, TResult>(
   handler: (request: Request, context: HandlerContext<TBody>) => Promise<TResult>,
   options: HandlerOptions<TBody> = {}
 ) {
-  return async function wrapped(request: Request) {
+  return async function wrapped(request: Request, context?: RouteContext) {
     const startedAt = Date.now();
     const requestId = crypto.randomUUID();
     const url = new URL(request.url);
@@ -55,7 +58,9 @@ export function apiHandler<TBody, TResult>(
         });
         if (token?.id || token?.role) break;
       }
-      const session = token?.id && token?.role ? { user: { id: token.id as string, role: token.role as Role } } : await auth(request);
+      const session = token?.id && token?.role
+        ? { user: { id: token.id as string, role: token.role as Role } }
+        : await auth();
       const user = session?.user ? { id: session.user.id, role: session.user.role } : null;
 
       // Diagnostic logging to help debug missing auth tokens during dev.
@@ -95,7 +100,16 @@ export function apiHandler<TBody, TResult>(
         }
       }
 
-      const data = await handler(request, { requestId, user, body: parsedBody });
+      const routeParams = context?.params
+        ? await Promise.resolve(context.params as Record<string, string> | Promise<Record<string, string>>)
+        : undefined;
+
+      const data = await handler(request, {
+        requestId,
+        user,
+        body: parsedBody,
+        params: routeParams,
+      });
       const response = NextResponse.json({ success: true, data }, { status: 200 });
       const duration = Date.now() - startedAt;
       response.headers.set("X-Request-ID", requestId);

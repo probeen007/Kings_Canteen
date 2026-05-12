@@ -50,6 +50,9 @@ export default async function Page() {
       })
     );
 
+    const asapOrders = orders.filter((order) => order.isAsap);
+    const scheduledOrders = orders.filter((order) => !order.isAsap);
+
     return (
       <div className="space-y-6">
         <div>
@@ -57,37 +60,80 @@ export default async function Page() {
           <p className="mt-2 text-sm text-slate-600">Track recent orders and status updates.</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          {orders.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-              No orders yet.
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-800">ASAP Orders</h2>
+              <span className="text-xs text-slate-400">{asapOrders.length} orders</span>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {orders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {order.user?.name ?? "Unknown"} · {order.user?.email ?? ""}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {order._count.items} items · Pickup {format(order.pickupTime, "hh:mm a, MMM d")}
-                    </p>
+            {asapOrders.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+                No ASAP orders.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {asapOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {order.user?.name ?? "Unknown"} · {order.user?.email ?? ""}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {order._count.items} items · Pickup ASAP
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        {order.status}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-900">Rs. {Number(order.totalAmount).toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                      {order.status}
-                    </span>
-                    <span className="text-sm font-semibold text-slate-900">Rs. {Number(order.totalAmount).toLocaleString()}</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-800">Scheduled Orders</h2>
+              <span className="text-xs text-slate-400">{scheduledOrders.length} orders</span>
             </div>
-          )}
+            {scheduledOrders.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+                No scheduled orders.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {scheduledOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{order.orderNumber}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {order.user?.name ?? "Unknown"} · {order.user?.email ?? ""}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {order._count.items} items · Pickup {format(order.pickupTime, "hh:mm a, MMM d")}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        {order.status}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-900">Rs. {Number(order.totalAmount).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
     );

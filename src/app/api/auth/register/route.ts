@@ -33,10 +33,22 @@ export async function POST(request: Request) {
   try {
     limit = await rateLimit(`rate:auth:register:${ip}`, 5, 60 * 60);
   } catch (err) {
-    // If Redis is not configured or the call fails, allow the request to continue
-    // but log the error for debugging. Do not block registration in dev environments.
+    // Fall back to a simple in-memory limiter when Redis is unavailable.
     console.error("rateLimit error:", err);
-    limit = null;
+    const now = Date.now();
+    const windowMs = 60 * 60 * 1000;
+    const key = `register:${ip}`;
+    (globalThis as any).__registerRateLimit ??= new Map<string, { count: number; resetAt: number }>();
+    const store = (globalThis as any).__registerRateLimit as Map<string, { count: number; resetAt: number }>;
+    const existing = store.get(key);
+    if (!existing || existing.resetAt <= now) {
+      const resetAt = now + windowMs;
+      store.set(key, { count: 1, resetAt });
+      limit = { allowed: true, resetAt };
+    } else {
+      existing.count += 1;
+      limit = { allowed: existing.count <= 5, resetAt: existing.resetAt };
+    }
   }
 
   if (limit && !limit.allowed) {

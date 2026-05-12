@@ -20,9 +20,11 @@ export function generateOrderToken(
   queuePosition: number | null,
   pickupTime: Date
 ) {
+  if (!env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is missing");
+  }
   const pickupTimeISO = pickupTime.toISOString();
   const expiryTime = new Date(pickupTime);
-  expiryTime.setHours(expiryTime.getHours() + 2);
 
   const token = jwt.sign(
     {
@@ -49,9 +51,12 @@ export function generateOrderToken(
 
 export function verifyOrderToken(token: string) {
   try {
+    if (!env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is missing");
+    }
     const decoded = jwt.verify(token, env.JWT_SECRET, {
       algorithms: ["HS256"],
-    }) as OrderTokenPayload;
+    }) as unknown as OrderTokenPayload;
     return decoded;
   } catch {
     throw new Error("TOKEN_INVALID");

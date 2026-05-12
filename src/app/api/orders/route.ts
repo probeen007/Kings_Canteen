@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiHandler } from "@/lib/apiHandler";
 import { AppError, AuthError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
+import type { OrderStatus } from "@prisma/client";
 import { getQueuePosition } from "@/lib/redis";
 import { RATE_LIMITS, enforceRateLimit } from "@/lib/rateLimiter";
 import { calculateTotal, generateOrderNumber, sanitizeInput } from "@/lib/utils";
@@ -13,12 +14,55 @@ import { generateQRCode, generateQRString } from "@/lib/qr";
 const listSchema = z.object({
   page: z.string().optional(),
   limit: z.string().optional(),
-  status: z
-    .enum(["PENDING", "CONFIRMED", "PREPARING", "READY", "COMPLETED", "CANCELLED"])
-    .optional(),
+  status: z.string().optional(),
 });
 
+const ASAP_TOKEN = "ASAP";
+const ASAP_PREP_MINUTES = 15;
+const OPERATING_START = 7;
+const OPERATING_END = 21;
+const SLOT_MINUTES = 10;
+
+function roundUpToMinutes(value: Date, minutes: number) {
+  const intervalMs = minutes * 60 * 1000;
+  return new Date(Math.ceil(value.getTime() / intervalMs) * intervalMs);
+}
+
+function getAsapPickupTime(now = new Date()) {
+  const start = new Date(now);
+  start.setHours(OPERATING_START, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(OPERATING_END, 0, 0, 0);
+
+  if (now.getTime() < start.getTime()) return start;
+
+  let candidate = new Date(now.getTime() + ASAP_PREP_MINUTES * 60 * 1000);
+  candidate = roundUpToMinutes(candidate, SLOT_MINUTES);
+
+  if (candidate.getTime() > end.getTime()) {
+    const nextDay = new Date(now);
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(OPERATING_START, 0, 0, 0);
+    return nextDay;
+  }
+
+  return candidate;
+}
+
+const ALLOWED_STATUSES = new Set([
+  "PENDING",
+  "CONFIRMED",
+  "PREPARING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+]);
+
 function validatePickupTime(value: string) {
+  if (value === ASAP_TOKEN) {
+    return getAsapPickupTime();
+  }
+
   const pickupTime = new Date(value);
   if (Number.isNaN(pickupTime.getTime())) {
     throw new AppError("Pickup time invalid", 400, "ORDER_003");
@@ -49,6 +93,7 @@ export const POST = apiHandler(
     }
 
     const body = context.body ?? createOrderSchema.parse({});
+    const isAsap = body.pickupTime === ASAP_TOKEN;
     const pickupTime = validatePickupTime(body.pickupTime);
 
     const limit = await enforceRateLimit(
@@ -100,6 +145,7 @@ export const POST = apiHandler(
           userId: context.user!.id,
           totalAmount: total.toNumber(),
           pickupTime,
+          isAsap,
           queuePosition,
           notes,
           status: "PENDING",
@@ -173,7 +219,7 @@ export const POST = apiHandler(
       qrCodeDataUrl: created.qrData,
     };
   },
-  { roles: ["USER"], schema: createOrderSchema, requireAuth: true }
+  { roles: ["USER", "STAFF", "ADMIN"], schema: createOrderSchema, requireAuth: true }
 );
 
 export const GET = apiHandler(
@@ -187,10 +233,19 @@ export const GET = apiHandler(
     const limit = Math.min(Number(params.limit ?? "10"), 20);
     const skip = (page - 1) * limit;
 
+    const statusList = (params.status ?? "")
+      .split(",")
+      .map((status) => status.trim())
+      .filter(Boolean);
+    const invalidStatus = statusList.find((status) => !ALLOWED_STATUSES.has(status));
+    if (invalidStatus) {
+      throw new AppError("Invalid status filter", 400, "ORDER_006", { status: invalidStatus });
+    }
+
     const orders = await prisma.order.findMany({
       where: {
         userId: context.user.id,
-        status: params.status,
+        status: statusList.length > 0 ? { in: statusList as OrderStatus[] } : undefined,
       },
       orderBy: { createdAt: "desc" },
       include: {
@@ -212,6 +267,7 @@ export const GET = apiHandler(
         status: order.status,
         totalAmount: Number(order.totalAmount),
         pickupTime: order.pickupTime.toISOString(),
+        isAsap: order.isAsap,
         queuePosition: order.queuePosition,
         items: order.items.map((item) => ({
           id: item.id,
@@ -226,5 +282,5 @@ export const GET = apiHandler(
       })),
     };
   },
-  { roles: ["USER"], schema: listSchema, requireAuth: true }
+  { roles: ["USER", "STAFF", "ADMIN"], schema: listSchema, requireAuth: true }
 );

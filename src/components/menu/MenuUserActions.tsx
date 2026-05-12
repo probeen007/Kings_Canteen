@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +9,12 @@ import { useAuth } from "@/hooks/useAuth";
 export function MenuUserActions() {
   const router = useRouter();
   const { user, signOut, isLoading } = useAuth();
+
+  useEffect(() => {
+    router.prefetch("/orders");
+    router.prefetch("/cart");
+    router.prefetch("/checkout");
+  }, [router]);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });

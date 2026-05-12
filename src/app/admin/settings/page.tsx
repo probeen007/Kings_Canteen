@@ -31,7 +31,7 @@ export default async function Page() {
       try {
         const key = `health:${Date.now()}`;
         await redis.set(key, "ok", { ex: 10 });
-        const val = await redis.get<string>(key);
+        const val = (await redis.get(key)) as string | null;
         return val === "ok" ? "Active" : "Unavailable";
       } catch {
         return "Unavailable";

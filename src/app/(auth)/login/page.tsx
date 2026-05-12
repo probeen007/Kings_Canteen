@@ -3,7 +3,7 @@
 import { signIn, signOut } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "react-hot-toast";
 
@@ -20,6 +20,13 @@ export default function Page() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    router.prefetch("/menu");
+    router.prefetch("/orders");
+    router.prefetch("/cart");
+    router.prefetch("/checkout");
+  }, [router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,6 +70,12 @@ export default function Page() {
       toast.error(message);
       return;
     }
+
+    Promise.allSettled([
+      fetch("/api/menu?summary=1", { cache: "no-store" }),
+      fetch("/api/menu?category=all&limit=12", { cache: "no-store" }),
+      fetch("/api/orders", { cache: "no-store", credentials: "include" }),
+    ]).catch(() => null);
 
     toast.success("Signed in successfully");
 

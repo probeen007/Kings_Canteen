@@ -44,8 +44,18 @@ export const POST = apiHandler(
     }
 
     const amount = Number(order.totalAmount);
+    if (!env.ESEWA_BASE_URL) {
+      throw new AppError("Payment configuration missing", 500, "CONFIG_001");
+    }
     const baseUrl = env.ESEWA_BASE_URL.replace(/\/$/, "");
     const isV2 = baseUrl.includes("/api/epay/main/v2");
+    if (!env.NEXT_PUBLIC_APP_URL) {
+      throw new AppError("Payment configuration missing", 500, "CONFIG_001");
+    }
+    if (!env.ESEWA_MERCHANT_CODE) {
+      throw new AppError("Payment configuration missing", 500, "CONFIG_001");
+    }
+
     const paymentUrl = baseUrl.includes("/epay/main") ? baseUrl : `${baseUrl}/epay/main`;
     const successUrl = `${env.NEXT_PUBLIC_APP_URL}/api/payment/verify`;
     const failureUrl = `${env.NEXT_PUBLIC_APP_URL}/api/payment/verify?status=failed`;
@@ -54,6 +64,10 @@ export const POST = apiHandler(
       const totalAmount = amount.toFixed(2);
       const signedFieldNames = "total_amount,transaction_uuid,product_code";
       const signaturePayload = `total_amount=${totalAmount},transaction_uuid=${order.id},product_code=${env.ESEWA_MERCHANT_CODE}`;
+      if (!env.ESEWA_SECRET_KEY) {
+        throw new AppError("Payment configuration missing", 500, "CONFIG_001");
+      }
+
       const signature = crypto
         .createHmac("sha256", env.ESEWA_SECRET_KEY)
         .update(signaturePayload)
@@ -92,5 +106,5 @@ export const POST = apiHandler(
       },
     };
   },
-  { roles: ["USER"], schema: initiateSchema, requireAuth: true }
+  { roles: ["USER", "STAFF", "ADMIN"], schema: initiateSchema, requireAuth: true }
 );

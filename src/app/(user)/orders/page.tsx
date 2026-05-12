@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { toast } from "react-hot-toast";
 
 import { useCart } from "@/hooks/useCart";
@@ -78,7 +78,17 @@ function PendingPickupCard({ order, onReorder }: { order: Order; onReorder: (o: 
             <p className="mt-1 text-base font-bold text-slate-900">#{order.orderNumber}</p>
             <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
               <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>Pickup {pickupDate.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              <span>
+                {order.isAsap
+                  ? "Pickup ASAP"
+                  : `Pickup ${pickupDate.toLocaleString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`}
+              </span>
             </div>
           </div>
           <StatusBadge status={order.status} />
@@ -135,7 +145,15 @@ function ReceivedCard({ order, onReorder }: { order: Order; onReorder: (o: Order
           <p className="text-sm font-bold text-slate-900">#{order.orderNumber}</p>
           <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
             <Clock className="h-3.5 w-3.5 shrink-0" />
-            <span>{pickupDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+            <span>
+              {order.isAsap
+                ? "Pickup ASAP"
+                : pickupDate.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+            </span>
           </div>
           <p className="mt-0.5 text-xs text-slate-400">
             {order.items.length} item{order.items.length !== 1 ? "s" : ""} · Rs. {order.totalAmount.toLocaleString()}
@@ -177,11 +195,17 @@ function EmptyState({ icon: Icon, title, body, cta }: {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function Page() {
+function OrdersPageContent() {
   const { orders, loading, error, reload } = useOrders();
   const { addItem } = useCart();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    router.prefetch("/menu");
+    router.prefetch("/cart");
+    router.prefetch("/checkout");
+  }, [router]);
 
   // Show toast if redirected from a claimed token page
   useEffect(() => {
@@ -339,5 +363,13 @@ export default function Page() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#f6f8fb]" />}>
+      <OrdersPageContent />
+    </Suspense>
   );
 }

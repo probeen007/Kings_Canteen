@@ -7,6 +7,6 @@ export const orderItemSchema = z.object({
 
 export const createOrderSchema = z.object({
 	items: z.array(orderItemSchema).min(1).max(20),
-	pickupTime: z.string().datetime(),
+	pickupTime: z.union([z.literal("ASAP"), z.string().datetime()]),
 	notes: z.string().max(200).optional(),
 });

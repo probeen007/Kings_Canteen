@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AlertCircle } from "lucide-react";
 
@@ -20,6 +20,13 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    router.prefetch("/admin/dashboard");
+    router.prefetch("/admin/orders");
+    router.prefetch("/admin/users");
+    router.prefetch("/admin/settings");
+  }, [router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

@@ -3,7 +3,7 @@
 import { addDays, addMinutes, format, isAfter, isBefore, setHours, setMinutes } from "date-fns";
 import { useRouter } from "next/navigation";
 import { Sora } from "next/font/google";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useCart } from "@/hooks/useCart";
 import { formatNPR } from "@/lib/utils";
@@ -17,6 +17,7 @@ type OrderResponse = {
 
 const OPERATING_START = 7;
 const OPERATING_END = 21;
+const ASAP_TOKEN = "ASAP";
 
 const sora = Sora({
   subsets: ["latin"],
@@ -40,6 +41,7 @@ export default function Page() {
   const { items, totalAmount, totalItems, clearCart } = useCart();
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [selectedTime, setSelectedTime] = useState<Date | null>(null);
+  const [pickupMode, setPickupMode] = useState<"ASAP" | "SCHEDULED">("SCHEDULED");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +52,18 @@ export default function Page() {
 
   const slots = useMemo(() => generateSlots(selectedDate), [selectedDate]);
 
+  useEffect(() => {
+    router.prefetch("/orders");
+    router.prefetch("/menu");
+  }, [router]);
+
   const handleSubmit = async () => {
     setError(null);
     if (!items.length) {
       setError("Your cart is empty.");
       return;
     }
-    if (!selectedTime || !isAfter(selectedTime, new Date())) {
+    if (pickupMode === "SCHEDULED" && (!selectedTime || !isAfter(selectedTime, new Date()))) {
       setError("Select a valid pickup time.");
       return;
     }
@@ -67,7 +74,7 @@ export default function Page() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         items: items.map((item) => ({ menuItemId: item.id, quantity: item.quantity })),
-        pickupTime: selectedTime.toISOString(),
+        pickupTime: pickupMode === "ASAP" ? ASAP_TOKEN : selectedTime!.toISOString(),
         notes: notes.trim() ? notes : undefined,
       }),
     });
@@ -141,6 +148,18 @@ export default function Page() {
           <section className="rounded-2xl border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold text-slate-800">Pickup time</h2>
           <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              className={`rounded-full px-4 py-2 text-sm ${
+                pickupMode === "ASAP" ? "bg-[#0b2447] text-white" : "bg-slate-100 text-slate-600"
+              }`}
+              onClick={() => {
+                setPickupMode("ASAP");
+                setSelectedTime(null);
+              }}
+              type="button"
+            >
+              ASAP
+            </button>
             {nextDays.map((date) => {
               const isActive = format(date, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
               return (
@@ -152,6 +171,7 @@ export default function Page() {
                   onClick={() => {
                     setSelectedDate(date);
                     setSelectedTime(null);
+                    setPickupMode("SCHEDULED");
                   }}
                   type="button"
                 >
@@ -161,7 +181,11 @@ export default function Page() {
             })}
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <div
+            className={`mt-6 grid grid-cols-3 gap-2 sm:grid-cols-4 ${
+              pickupMode === "ASAP" ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
             {slots.map((slot) => {
               const disabled = isBefore(slot, new Date());
               const active = selectedTime?.getTime() === slot.getTime();
@@ -172,7 +196,10 @@ export default function Page() {
                     active ? "bg-[#0b2447] text-white" : "bg-slate-100 text-slate-700"
                   } ${disabled ? "opacity-40" : ""}`}
                   disabled={disabled}
-                  onClick={() => setSelectedTime(slot)}
+                  onClick={() => {
+                    setPickupMode("SCHEDULED");
+                    setSelectedTime(slot);
+                  }}
                   type="button"
                 >
                   {format(slot, "hh:mm a")}
@@ -180,6 +207,10 @@ export default function Page() {
               );
             })}
           </div>
+
+          {pickupMode === "ASAP" ? (
+            <p className="mt-3 text-xs text-slate-500">ASAP selected. No time selection needed.</p>
+          ) : null}
 
           <div className="mt-6">
             <label className="text-sm font-medium text-slate-700">Notes (optional)</label>
@@ -227,3 +258,4 @@ export default function Page() {
     </main>
   );
 }
+

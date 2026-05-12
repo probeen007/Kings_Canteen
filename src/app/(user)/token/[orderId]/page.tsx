@@ -97,13 +97,15 @@ export default async function TokenPage({
               <div className="flex items-start gap-2">
                 <Clock className="mt-0.5 h-4 w-4 text-slate-500" />
                 <span>
-                  Pickup {pickupTime.toLocaleString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  Pickup {order.isAsap
+                    ? "ASAP"
+                    : pickupTime.toLocaleString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                 </span>
               </div>
               {order.queuePosition ? (

@@ -15,7 +15,7 @@ export const GET = apiHandler(async (request) => {
 
   if (summary === "1") {
     try {
-      const cached = await redis.get<{ categories: unknown }>(SUMMARY_CACHE_KEY);
+      const cached = (await redis.get(SUMMARY_CACHE_KEY)) as { categories: unknown } | null;
       if (cached) return cached;
     } catch (error) {
       console.info("menu:summary-cache-read-failed", {
@@ -60,7 +60,7 @@ export const GET = apiHandler(async (request) => {
   const cacheKey = cursor ? null : `${ITEMS_CACHE_PREFIX}:${category}:limit:${limit}`;
   if (cacheKey) {
     try {
-      const cached = await redis.get<{ items: unknown; nextCursor: string | null }>(cacheKey);
+      const cached = (await redis.get(cacheKey)) as { items: unknown; nextCursor: string | null } | null;
       if (cached) return cached;
     } catch (error) {
       console.info("menu:items-cache-read-failed", {

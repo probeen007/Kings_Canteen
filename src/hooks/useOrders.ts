@@ -3,8 +3,51 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Order } from "@/types/order";
 
-const ACTIVE_STATUSES = new Set(["CONFIRMED", "PREPARING", "READY"]);
-const POLL_INTERVAL_MS = 15_000; // 15 s — fast enough to feel live, cheap enough to not hammer DB
+const CACHE_KEY = "orders:cache:v1";
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const VERSION_POLL_MS = 60 * 1000;
+
+type OrdersCache = {
+  fetchedAt: number;
+  orders: Order[];
+  version?: string;
+};
+
+function readCache(): OrdersCache | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as OrdersCache;
+    if (!parsed?.fetchedAt || !Array.isArray(parsed.orders)) return null;
+    if (Date.now() - parsed.fetchedAt > CACHE_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(orders: Order[], version?: string) {
+  try {
+    const payload: OrdersCache = { fetchedAt: Date.now(), orders, version };
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore cache write failures (private mode, storage full, etc.)
+  }
+}
+
+async function fetchVersion() {
+  try {
+    const response = await fetch("/api/orders/version", {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { data?: { version?: string } };
+    return payload.data?.version ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function useOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -12,72 +55,89 @@ export function useOrders() {
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedRef = useRef(false);
+  const versionRef = useRef<string | null>(null);
+  const fetchingRef = useRef(false);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  const loadOrders = useCallback(async (showLoadingSpinner = false) => {
+  const loadOrders = useCallback(async (showLoadingSpinner = false, force = false) => {
     if (showLoadingSpinner) setLoading(true);
     setError(null);
+
+    if (!force) {
+      const cached = readCache();
+      if (cached) {
+        if (!mountedRef.current) return;
+        setOrders(cached.orders);
+        setLoading(false);
+        hasLoadedRef.current = true;
+        versionRef.current = cached.version ?? null;
+        void fetchVersion().then((version) => {
+          if (!version) return;
+          if (versionRef.current && version === versionRef.current) return;
+          versionRef.current = version;
+          if (mountedRef.current) {
+            void loadOrders(false, true);
+          }
+        });
+        return;
+      }
+    }
+
     try {
-      const response = await fetch("/api/orders", { cache: "no-store" });
-      if (!response.ok) throw new Error("orders-load");
+      if (fetchingRef.current) return;
+      fetchingRef.current = true;
+      const response = await fetch("/api/orders", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          code?: string;
+          error?: string;
+        } | null;
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(payload?.code ?? "AUTH");
+        }
+        throw new Error(payload?.code ?? "orders-load");
+      }
       const payload = (await response.json()) as { data?: { orders?: Order[] } };
       if (!mountedRef.current) return;
-      setOrders(payload.data?.orders ?? []);
-    } catch {
+      const list = payload.data?.orders ?? [];
+      setOrders(list);
+      const version = await fetchVersion();
+      versionRef.current = version ?? versionRef.current;
+      writeCache(list, versionRef.current ?? undefined);
+      hasLoadedRef.current = true;
+    } catch (error) {
       if (!mountedRef.current) return;
-      setError("Unable to load orders. Please try again.");
+      if (error instanceof Error && error.message === "AUTH") {
+        setError("Session expired. Please sign in again.");
+      } else {
+        setError("Unable to load orders. Please try again.");
+      }
     } finally {
+      fetchingRef.current = false;
       if (mountedRef.current && showLoadingSpinner) setLoading(false);
       if (mountedRef.current) setLoading(false);
     }
   }, []);
 
-  // ── Smart polling ─────────────────────────────────────────────────────────
-  // Only poll while:
-  //   1. The tab is visible (Page Visibility API)
-  //   2. There are orders in an active state (CONFIRMED / PREPARING / READY)
-  // When either condition drops, polling stops automatically.
-
-  const scheduleNextPoll = useCallback(
-    (currentOrders: Order[]) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-
-      const hasActiveOrders = currentOrders.some((o) => ACTIVE_STATUSES.has(o.status));
-      const tabVisible = !document.hidden;
-
-      if (!hasActiveOrders || !tabVisible) return; // nothing to poll for
-
-      timerRef.current = setTimeout(async () => {
-        if (!mountedRef.current) return;
-        await loadOrders(false); // silent refresh — no loading spinner
-      }, POLL_INTERVAL_MS);
-    },
-    [loadOrders]
-  );
-
-  // Re-schedule poll whenever orders change
   useEffect(() => {
-    scheduleNextPoll(orders);
-  }, [orders, scheduleNextPoll]);
-
-  // Pause / resume polling when tab visibility changes
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // Tab just became visible — refresh immediately then resume scheduling
-        loadOrders(false);
-      } else {
-        // Tab hidden — cancel pending poll
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
+    if (!hasLoadedRef.current) return;
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      void fetchVersion().then((version) => {
+        if (!version) return;
+        if (versionRef.current && version === versionRef.current) return;
+        versionRef.current = version;
+        if (mountedRef.current) {
+          void loadOrders(false, true);
         }
-      }
-    };
+      });
+    }, VERSION_POLL_MS);
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    return () => clearInterval(interval);
   }, [loadOrders]);
 
   // Initial load
@@ -86,9 +146,8 @@ export function useOrders() {
     loadOrders(true);
     return () => {
       mountedRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [loadOrders]);
 
-  return { orders, loading, error, reload: () => loadOrders(true) };
+  return { orders, loading, error, reload: () => loadOrders(true, true) };
 }

@@ -1,21 +1,26 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-// Middleware for route protection and security headers
+// Proxy for route protection and security headers
 function withSecurityHeaders(response: NextResponse) {
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(self), microphone=()");
+  const isProd = process.env.NODE_ENV === "production";
+  const scriptSrc = isProd
+    ? "script-src 'self' 'unsafe-inline'"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+
   response.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'"
+    `default-src 'self'; ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'`
   );
   response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return response;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api");
   const isAuthApi = pathname.startsWith("/api/auth");
@@ -60,10 +65,10 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/token");
 
   // 1. Handle Unauthenticated Users
-  if ((isAdminRoute || isStaffRoute || isUserRoute || (isApi && !isAdminApi)) && 
-      !isAuthenticated && 
-      !isStaffLoginPage && 
-      !isAdminLoginPage && 
+  if ((isAdminRoute || isStaffRoute || isUserRoute || (isApi && !isAdminApi)) &&
+      !isAuthenticated &&
+      !isStaffLoginPage &&
+      !isAdminLoginPage &&
       !isAuthPage) {
     if (isApi) {
       return withSecurityHeaders(
@@ -74,7 +79,7 @@ export async function middleware(request: NextRequest) {
     return withSecurityHeaders(NextResponse.redirect(loginUrl));
   }
 
-  // 2. If it's a login page, allow it to proceed regardless of auth state (the page will handle redirects if needed)
+  // 2. If it's a login page, allow it to proceed regardless of auth state
   if (isAuthPage || isStaffLoginPage || isAdminLoginPage) {
     return withSecurityHeaders(NextResponse.next());
   }
@@ -86,11 +91,19 @@ export async function middleware(request: NextRequest) {
         NextResponse.json({ success: false, error: "Forbidden", code: "AUTH_005" }, { status: 403 })
       );
     }
-    // Redirect non-admins trying to access admin routes
     return withSecurityHeaders(NextResponse.redirect(new URL("/staff/login", request.url)));
   }
 
   if (isStaffRoute && role !== "STAFF" && role !== "ADMIN") {
+    if (isApi) {
+      return withSecurityHeaders(
+        NextResponse.json({ success: false, error: "Forbidden", code: "AUTH_005" }, { status: 403 })
+      );
+    }
+    return withSecurityHeaders(NextResponse.redirect(new URL("/login", request.url)));
+  }
+
+  if (isUserRoute && role !== "USER") {
     if (isApi) {
       return withSecurityHeaders(
         NextResponse.json({ success: false, error: "Forbidden", code: "AUTH_005" }, { status: 403 })

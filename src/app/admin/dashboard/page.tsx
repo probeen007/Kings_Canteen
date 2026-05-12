@@ -59,9 +59,9 @@ export default async function AdminDashboard() {
       return <ErrorState title="Access denied" message="You must sign in as an admin to view the dashboard." />;
     }
 
-    const cached = await redis.get<{ ordersCount: number; revenue: number; activeUsers: number }>(STATS_CACHE_KEY).catch(
-      () => null
-    );
+    const cached = (await redis.get(STATS_CACHE_KEY).catch(() => null)) as
+      | { ordersCount: number; revenue: number; activeUsers: number }
+      | null;
 
     const now = Date.now();
     const since = new Date(now - 24 * 60 * 60 * 1000);

@@ -1,5 +1,4 @@
-﻿import fs from "fs";
-import bcrypt from "bcryptjs";
+﻿import bcrypt from "bcryptjs";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
@@ -42,12 +41,8 @@ await redis.del(failKey, lockKey);
 }
 }
 
-function logAuth(msg: string) {
-try {
-fs.appendFileSync("./tmp_auth.log", `${new Date().toISOString()} ${msg}\n`);
-} catch (e) {
-// ignore
-}
+function logAuth(_msg: string) {
+	// Logging disabled to avoid writing auth data to disk.
 }
 
 const authConfig: NextAuthConfig = {
@@ -147,9 +142,12 @@ role: user.role,
 ],
 session: {
 strategy: "jwt",
-maxAge: 7 * 24 * 60 * 60,
-updateAge: 24 * 60 * 60,
+	maxAge: 365 * 24 * 60 * 60,
+	updateAge: 24 * 60 * 60,
 },
+	jwt: {
+		maxAge: 365 * 24 * 60 * 60,
+	},
 	// Explicit cookie settings to avoid secure/SameSite issues in dev
 	cookies: {
 		sessionToken: {
@@ -166,10 +164,13 @@ callbacks: {
 async jwt({ token, user }) {
 		logAuth(`jwt:start user=${user ? user.email : 'null'}`);
 		try {
-			if (user) {
-				token.id = user.id;
-				token.role = user.role;
-				token.name = user.name;
+			if (user && user.id) {
+				const role = (user as { role?: string }).role;
+				token.id = String(user.id);
+				if (role) {
+					token.role = role as "USER" | "STAFF" | "ADMIN";
+				}
+				token.name = user.name ?? "";
 				logAuth(`jwt:modified-token`);
 			}
 			logAuth(`jwt:success`);
@@ -182,10 +183,10 @@ async jwt({ token, user }) {
 	async session({ session, token }) {
 		logAuth(`session:start`);
 		try {
-			if (session.user) {
-				session.user.id = token.id as string;
+			if (session.user && token.id && token.role) {
+				session.user.id = String(token.id);
 				session.user.role = token.role as "USER" | "STAFF" | "ADMIN";
-				session.user.name = token.name as string;
+				session.user.name = (token.name as string | null) ?? session.user.name ?? "";
 				logAuth(`session:modified`);
 			}
 			logAuth(`session:success`);

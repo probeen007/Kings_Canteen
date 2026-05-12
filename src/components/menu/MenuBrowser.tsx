@@ -8,6 +8,34 @@ import { SearchBar } from "@/components/menu/SearchBar";
 import type { MenuCategorySummary, MenuItem, MenuItemsPage } from "@/types/menu";
 
 const PAGE_LIMIT = 12;
+const MENU_CACHE_KEY = "menu:summary:v1";
+const MENU_ITEMS_CACHE_PREFIX = "menu:items:v1:";
+const MENU_CACHE_TTL_MS = 5 * 60 * 1000;
+const SKELETON_DELAY_MS = 400;
+
+type MenuCache<T> = { fetchedAt: number; data: T };
+
+function readMenuCache<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MenuCache<T>;
+    if (!parsed?.fetchedAt) return null;
+    if (Date.now() - parsed.fetchedAt > MENU_CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeMenuCache<T>(key: string, data: T) {
+  try {
+    const payload: MenuCache<T> = { fetchedAt: Date.now(), data };
+    sessionStorage.setItem(key, JSON.stringify(payload));
+  } catch {
+    // Ignore cache write failures
+  }
+}
 
 function SkeletonCard() {
   return (
@@ -46,7 +74,11 @@ export function MenuBrowser() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCategorySkeleton, setShowCategorySkeleton] = useState(false);
+  const [showItemsSkeleton, setShowItemsSkeleton] = useState(false);
   const observerRef = useRef<HTMLDivElement | null>(null);
+  const categorySkeletonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const itemsSkeletonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -54,15 +86,63 @@ export function MenuBrowser() {
     return items.filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(normalized));
   }, [items, query]);
 
-  const showInitialSkeleton = loadingItems && items.length === 0;
+  const showInitialSkeleton = loadingItems && items.length === 0 && showItemsSkeleton;
   const showAppendSkeleton = !query && loadingMore;
   const skeletonCount = showInitialSkeleton ? 6 : showAppendSkeleton ? 4 : 0;
+
+  useEffect(() => {
+    if (loadingCategories) {
+      if (categorySkeletonTimer.current) clearTimeout(categorySkeletonTimer.current);
+      categorySkeletonTimer.current = setTimeout(() => {
+        setShowCategorySkeleton(true);
+      }, SKELETON_DELAY_MS);
+    } else {
+      if (categorySkeletonTimer.current) clearTimeout(categorySkeletonTimer.current);
+      setShowCategorySkeleton(false);
+    }
+
+    return () => {
+      if (categorySkeletonTimer.current) clearTimeout(categorySkeletonTimer.current);
+    };
+  }, [loadingCategories]);
+
+  useEffect(() => {
+    if (loadingItems && items.length === 0) {
+      if (itemsSkeletonTimer.current) clearTimeout(itemsSkeletonTimer.current);
+      itemsSkeletonTimer.current = setTimeout(() => {
+        setShowItemsSkeleton(true);
+      }, SKELETON_DELAY_MS);
+    } else {
+      if (itemsSkeletonTimer.current) clearTimeout(itemsSkeletonTimer.current);
+      setShowItemsSkeleton(false);
+    }
+
+    return () => {
+      if (itemsSkeletonTimer.current) clearTimeout(itemsSkeletonTimer.current);
+    };
+  }, [loadingItems, items.length]);
 
   useEffect(() => {
     let cancelled = false;
     const loadCategories = async () => {
       setLoadingCategories(true);
       setError(null);
+
+      const cached = readMenuCache<MenuCategorySummary[]>(MENU_CACHE_KEY);
+      if (cached && cached.length) {
+        const totalCount = cached.reduce((sum, category) => sum + category.itemCount, 0);
+        const withAll: MenuCategorySummary[] = [
+          { id: "all", name: "All", slug: "all", itemCount: totalCount },
+          ...cached,
+        ];
+        if (!cancelled) {
+          setCategories(withAll);
+          setActiveSlug((prev) => prev || "all");
+          setLoadingCategories(false);
+        }
+        return;
+      }
+
       try {
         const response = await fetch(`/api/menu?summary=1`, { cache: "no-store" });
         if (!response.ok) {
@@ -70,6 +150,7 @@ export function MenuBrowser() {
         }
         const payload = (await response.json()) as { data?: { categories?: MenuCategorySummary[] } };
         const list = payload.data?.categories ?? [];
+        writeMenuCache(MENU_CACHE_KEY, list);
         const totalCount = list.reduce((sum, category) => sum + category.itemCount, 0);
         const withAll: MenuCategorySummary[] = [
           { id: "all", name: "All", slug: "all", itemCount: totalCount },
@@ -94,12 +175,20 @@ export function MenuBrowser() {
   const fetchItems = async (slug: string, cursor: string | null, append: boolean) => {
     const params = new URLSearchParams({ category: slug, limit: String(PAGE_LIMIT) });
     if (cursor) params.set("cursor", cursor);
+    if (!cursor && !append) {
+      const cached = readMenuCache<MenuItemsPage>(`${MENU_ITEMS_CACHE_PREFIX}${slug}`);
+      if (cached) return cached;
+    }
     const response = await fetch(`/api/menu?${params.toString()}`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error("menu-items");
     }
     const payload = (await response.json()) as { data?: MenuItemsPage };
-    return payload.data ?? { items: [], nextCursor: null };
+    const page = payload.data ?? { items: [], nextCursor: null };
+    if (!cursor && !append) {
+      writeMenuCache(`${MENU_ITEMS_CACHE_PREFIX}${slug}`, page);
+    }
+    return page;
   };
 
   useEffect(() => {
@@ -162,7 +251,7 @@ export function MenuBrowser() {
 
   return (
     <div className="space-y-4">
-      {loadingCategories ? (
+      {loadingCategories && showCategorySkeleton ? (
         <SkeletonPills />
       ) : (
         <CategoryFilter categories={categories as any} activeSlug={activeSlug} onChange={setActiveSlug} />
