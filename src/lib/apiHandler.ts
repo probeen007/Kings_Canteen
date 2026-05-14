@@ -61,7 +61,10 @@ export function apiHandler<TBody, TResult>(
       const session = token?.id && token?.role
         ? { user: { id: token.id as string, role: token.role as Role } }
         : await auth();
-      const user = session?.user ? { id: session.user.id, role: session.user.role } : null;
+      const user =
+        session?.user?.id && session?.user?.role
+          ? { id: session.user.id as string, role: session.user.role as Role }
+          : null;
 
       // Diagnostic logging to help debug missing auth tokens during dev.
       const debug = process.env.DEBUG_API_AUTH === "1" || process.env.NODE_ENV !== "production";

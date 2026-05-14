@@ -1,4 +1,4 @@
-﻿import { Redis } from "@upstash/redis";
+import { Redis } from "@upstash/redis";
 
 import { env } from "@/lib/env";
 
@@ -37,22 +37,46 @@ return -1;
 let redisClient: any;
 
 if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-console.warn("[Upstash Redis] URL or token missing — using in-memory stub for dev");
-redisClient = createInMemoryRedisStub();
+  console.warn("[Upstash Redis] URL or token missing — using in-memory stub for dev");
+  redisClient = createInMemoryRedisStub();
 } else {
-redisClient =
-globalForRedis.redis ??
-new Redis({
-url: env.UPSTASH_REDIS_REST_URL,
-token: env.UPSTASH_REDIS_REST_TOKEN,
-});
+  const upstash =
+    globalForRedis.redis ??
+    new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
 
-if (process.env.NODE_ENV !== "production") {
-globalForRedis.redis = redisClient;
-}
+  if (process.env.NODE_ENV !== "production") {
+    globalForRedis.redis = upstash;
+  }
+
+  // Wrap every method with a 3-second timeout.
+  // When Upstash hostname is unreachable, DNS failure takes 10-15 s by default.
+  // This proxy makes the fallback kick in almost immediately.
+  const stub = createInMemoryRedisStub();
+  const TIMEOUT_MS = 3_000;
+
+  redisClient = new Proxy(upstash, {
+    get(target, prop) {
+      const orig = (target as any)[prop];
+      if (typeof orig !== "function") return orig;
+      return (...args: any[]) => {
+        const call = orig.apply(target, args) as Promise<any>;
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Redis timeout")), TIMEOUT_MS)
+        );
+        return Promise.race([call, timeout]).catch((err) => {
+          // Re-throw so callers' own catch blocks / fallback logic runs
+          throw err;
+        });
+      };
+    },
+  });
 }
 
 export const redis = redisClient;
+
 
 const fallbackRateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
@@ -109,16 +133,27 @@ try {
 }
 
 export async function setOrderCache(orderId: string, data: unknown, ttlSeconds: number) {
-const key = `order:${orderId}`;
-await redis.set(key, data, { ex: ttlSeconds });
+  try {
+    const key = `order:${orderId}`;
+    await redis.set(key, data, { ex: ttlSeconds });
+  } catch (err) {
+    console.warn("setOrderCache failed (Redis unreachable), skipping cache", err);
+  }
 }
 
 export async function getOrderCache<T>(orderId: string) {
-const key = `order:${orderId}`;
-return (await redis.get(key)) as T | null;
+  try {
+    const key = `order:${orderId}`;
+    return (await redis.get(key)) as T | null;
+  } catch {
+    return null;
+  }
 }
 
 export async function invalidateOrderCache(orderId: string) {
-const key = `order:${orderId}`;
-await redis.del(orderId);
+  try {
+    await redis.del(orderId);
+  } catch {
+    // non-fatal — cache will expire naturally
+  }
 }
