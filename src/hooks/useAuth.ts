@@ -3,6 +3,7 @@
 import { signOut, useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { clientCache } from "@/lib/clientCache";
 
 export function useAuth() {
 	const { data, status } = useSession();
@@ -23,6 +24,9 @@ export function useAuth() {
 		isAdmin: role === "ADMIN",
 		isStaff: role === "STAFF" || role === "ADMIN",
 		isLoading: status === "loading",
-		signOut,
+		signOut: async (options) => {
+			clientCache.clearAll();
+			return signOut(options);
+		},
 	};
 }

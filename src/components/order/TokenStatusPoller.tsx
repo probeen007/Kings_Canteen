@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { clientCache } from "@/lib/clientCache";
 
 /**
  * Silently polls GET /api/orders/[orderId] every 10 s.
@@ -26,10 +27,12 @@ export function TokenStatusPoller({ orderId }: { orderId: string }) {
         const status = data?.data?.status;
 
         if (status === "COMPLETED") {
+          clientCache.invalidate("orders:list");
           router.replace("/orders?claimed=1");
-          return; // stop polling
+          return;
         }
         if (status === "CANCELLED") {
+          clientCache.invalidate("orders:list");
           router.replace("/orders");
           return;
         }

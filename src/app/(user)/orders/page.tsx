@@ -235,7 +235,7 @@ function OrdersPageContent() {
   };
 
   // Split orders into the two sections
-  const toBeReceived = orders.filter((o) =>
+  const toBeReceived = (orders || []).filter((o) =>
     ["CONFIRMED", "PREPARING", "READY"].includes(o.status)
   );
   // Sort READY first
@@ -245,7 +245,7 @@ function OrdersPageContent() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  const received = orders.filter((o) => o.status === "COMPLETED");
+  const received = (orders || []).filter((o) => o.status === "COMPLETED");
 
   return (
     <main className="min-h-screen bg-[#f6f8fb]">

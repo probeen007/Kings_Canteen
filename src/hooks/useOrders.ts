@@ -1,154 +1,125 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchWithRetry } from "@/lib/fetcher";
 import type { Order } from "@/types/order";
+import { clientCache } from "@/lib/clientCache";
 
-const CACHE_KEY = "orders:cache:v1";
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const VERSION_POLL_MS = 60 * 1000;
+const CACHE_KEY = "orders:list";
+const TTL_MS = 30_000;          // 30 s — fresh window (no refetch if within this)
+const POLL_INTERVAL_MS = 15_000; // poll when active orders exist + tab visible
 
-type OrdersCache = {
-  fetchedAt: number;
-  orders: Order[];
-  version?: string;
-};
+const ACTIVE_STATUSES = new Set(["CONFIRMED", "PREPARING", "READY"]);
 
-function readCache(): OrdersCache | null {
-  try {
-    const raw = sessionStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as OrdersCache;
-    if (!parsed?.fetchedAt || !Array.isArray(parsed.orders)) return null;
-    if (Date.now() - parsed.fetchedAt > CACHE_TTL_MS) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(orders: Order[], version?: string) {
-  try {
-    const payload: OrdersCache = { fetchedAt: Date.now(), orders, version };
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(payload));
-  } catch {
-    // Ignore cache write failures (private mode, storage full, etc.)
-  }
-}
-
-async function fetchVersion() {
-  try {
-    const response = await fetchWithRetry("/api/orders/version", {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as { data?: { version?: string } };
-    return payload.data?.version ?? null;
-  } catch {
-    return null;
-  }
+async function fetchOrders(): Promise<Order[]> {
+  const res = await fetch("/api/orders", { cache: "no-store", credentials: "include" });
+  if (!res.ok) throw new Error(`orders-load: ${res.status}`);
+  const payload = (await res.json()) as { data?: { orders?: Order[] } };
+  return payload.data?.orders ?? [];
 }
 
 export function useOrders() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Initialise state from cache immediately — zero-delay render on revisit
+  const cached = clientCache.get<Order[]>(CACHE_KEY);
+  const [orders, setOrders] = useState<Order[]>(cached?.data ?? []);
+  const [loading, setLoading] = useState(!cached);   // only show spinner if no cache at all
   const [error, setError] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
-  const hasLoadedRef = useRef(false);
-  const versionRef = useRef<string | null>(null);
-  const fetchingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
-  const loadOrders = useCallback(async (showLoadingSpinner = false, force = false) => {
-    if (showLoadingSpinner) setLoading(true);
+  // ── Core load ────────────────────────────────────────────────────────────
+  const loadOrders = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     setError(null);
-
-    if (!force) {
-      const cached = readCache();
-      if (cached) {
-        if (!mountedRef.current) return;
-        setOrders(cached.orders);
-        setLoading(false);
-        hasLoadedRef.current = true;
-        versionRef.current = cached.version ?? null;
-        void fetchVersion().then((version) => {
-          if (!version) return;
-          if (versionRef.current && version === versionRef.current) return;
-          versionRef.current = version;
-          if (mountedRef.current) {
-            void loadOrders(false, true);
-          }
-        });
-        return;
-      }
-    }
-
     try {
-      if (fetchingRef.current) return;
-      fetchingRef.current = true;
-      const response = await fetchWithRetry("/api/orders", {
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          code?: string;
-          error?: string;
-        } | null;
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(payload?.code ?? "AUTH");
+      const data = await clientCache.fetchWithCache(
+        CACHE_KEY,
+        fetchOrders,
+        TTL_MS,
+        (fresh) => {
+          if (mountedRef.current) setOrders(fresh);
         }
-        throw new Error(payload?.code ?? "orders-load");
+      );
+      if (mountedRef.current) {
+        setOrders(data);
+        setLoading(false);
       }
-      const payload = (await response.json()) as { data?: { orders?: Order[] } };
-      if (!mountedRef.current) return;
-      const list = payload.data?.orders ?? [];
-      setOrders(list);
-      const version = await fetchVersion();
-      versionRef.current = version ?? versionRef.current;
-      writeCache(list, versionRef.current ?? undefined);
-      hasLoadedRef.current = true;
-    } catch (error) {
-      if (!mountedRef.current) return;
-      if (error instanceof Error && error.message === "AUTH") {
-        setError("Session expired. Please sign in again.");
-      } else {
+    } catch {
+      if (mountedRef.current) {
         setError("Unable to load orders. Please try again.");
+        setLoading(false);
       }
-    } finally {
-      fetchingRef.current = false;
-      if (mountedRef.current && showLoadingSpinner) setLoading(false);
-      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (!hasLoadedRef.current) return;
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      void fetchVersion().then((version) => {
-        if (!version) return;
-        if (versionRef.current && version === versionRef.current) return;
-        versionRef.current = version;
-        if (mountedRef.current) {
-          void loadOrders(false, true);
-        }
-      });
-    }, VERSION_POLL_MS);
-
-    return () => clearInterval(interval);
+  // ── Smart polling — only while tab visible + active orders exist ──────────
+  const scheduleNextPoll = useCallback((currentOrders: Order[]) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const hasActive = currentOrders.some((o) => ACTIVE_STATUSES.has(o.status));
+    if (!hasActive || document.hidden) return;
+    timerRef.current = setTimeout(async () => {
+      if (!mountedRef.current) return;
+      // Force revalidation (ignore TTL) for active orders — status changes matter
+      clientCache.invalidate(CACHE_KEY);
+      await loadOrders(false);
+    }, POLL_INTERVAL_MS);
   }, [loadOrders]);
 
-  // Initial load
+  useEffect(() => { scheduleNextPoll(orders); }, [orders, scheduleNextPoll]);
+
+  // Tab visibility: refresh immediately on focus if cache is stale
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.hidden) {
+        if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+      } else {
+        const entry = clientCache.get<Order[]>(CACHE_KEY);
+        if (!entry || entry.isStale) loadOrders(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadOrders]);
+
+  // ── Mount: serve cache instantly, revalidate if stale ────────────────────
   useEffect(() => {
     mountedRef.current = true;
-    loadOrders(true);
+    const entry = clientCache.get<Order[]>(CACHE_KEY);
+    if (!entry) {
+      loadOrders(true);        // no cache — full fetch
+    } else if (entry.isStale) {
+      setOrders(entry.data);   // show stale immediately
+      setLoading(false);
+      loadOrders(false);       // revalidate in background
+    } else {
+      setOrders(entry.data);   // fresh cache — done, no fetch
+      setLoading(false);
+    }
     return () => {
       mountedRef.current = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [loadOrders]);
 
-  return { orders, loading, error, reload: () => loadOrders(true, true) };
+  /** Call this after placing an order or any mutation to force a fresh fetch */
+  const invalidateAndReload = useCallback(() => {
+    clientCache.invalidate(CACHE_KEY);
+    loadOrders(true);
+  }, [loadOrders]);
+
+  return {
+    orders,
+    loading,
+    error,
+    reload: () => loadOrders(true),
+    invalidateAndReload,
+  };
+}
+
+/** Warm the orders cache in the background (call from prefetcher) */
+export function prefetchOrders() {
+  const entry = clientCache.get<Order[]>(CACHE_KEY);
+  if (!entry || entry.isStale) {
+    clientCache.revalidate(CACHE_KEY, fetchOrders, TTL_MS);
+  }
 }

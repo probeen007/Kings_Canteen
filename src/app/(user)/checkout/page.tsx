@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCart } from "@/hooks/useCart";
 import { formatNPR } from "@/lib/utils";
+import { clientCache } from "@/lib/clientCache";
 
 type OrderResponse = {
   orderId: string;
@@ -111,6 +112,7 @@ export default function Page() {
       return;
     }
 
+    clientCache.invalidate("orders:list");
     clearCart();
 
     const form = document.createElement("form");

@@ -83,8 +83,8 @@ export function MenuBrowser() {
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return items;
-    return items.filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(normalized));
+    if (!normalized) return items || [];
+    return (items || []).filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(normalized));
   }, [items, query]);
 
   const showInitialSkeleton = loadingItems && items.length === 0 && showItemsSkeleton;

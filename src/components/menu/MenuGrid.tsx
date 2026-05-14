@@ -31,8 +31,8 @@ export function MenuGrid({ categories }: MenuGridProps) {
   const filteredItems = useMemo(() => {
     if (!activeCategory) return [];
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return activeCategory.items;
-    return activeCategory.items.filter((item) =>
+    if (!normalized) return activeCategory.items || [];
+    return (activeCategory.items || []).filter((item) =>
       `${item.name} ${item.description ?? ""}`.toLowerCase().includes(normalized)
     );
   }, [activeCategory, query]);
