@@ -24,7 +24,7 @@ export function useAuth() {
 		isAdmin: role === "ADMIN",
 		isStaff: role === "STAFF" || role === "ADMIN",
 		isLoading: status === "loading",
-		signOut: async (options) => {
+		signOut: async (options?: Parameters<typeof signOut>[0]) => {
 			clientCache.clearAll();
 			return signOut(options);
 		},
