@@ -18,6 +18,7 @@ const updateCategorySchema = z.object({
     .optional(),
   imageUrl: z.string().url().nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const PUT = apiHandler(
@@ -32,6 +33,7 @@ export const PUT = apiHandler(
         description: body.description ?? undefined,
         imageUrl: body.imageUrl ?? undefined,
         sortOrder: body.sortOrder,
+        isActive: body.isActive,
       },
     });
     await redis.del("menu:active:v1");

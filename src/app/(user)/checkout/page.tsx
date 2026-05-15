@@ -4,6 +4,7 @@ import { addDays, addMinutes, format, isAfter, isBefore, setHours, setMinutes } 
 import { useRouter } from "next/navigation";
 import { Sora } from "next/font/google";
 import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { useCart } from "@/hooks/useCart";
 import { formatNPR } from "@/lib/utils";
@@ -44,7 +45,7 @@ export default function Page() {
   const [selectedTime, setSelectedTime] = useState<Date | null>(null);
   const [pickupMode, setPickupMode] = useState<"ASAP" | "SCHEDULED">("SCHEDULED");
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "creating" | "redirecting">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const nextDays = useMemo(() => {
@@ -69,7 +70,7 @@ export default function Page() {
       return;
     }
 
-    setLoading(true);
+    setPhase("creating");
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -79,19 +80,21 @@ export default function Page() {
         notes: notes.trim() ? notes : undefined,
       }),
     });
-    setLoading(false);
 
     if (!response.ok) {
+      setPhase("idle");
       setError("Failed to create order.");
       return;
     }
 
     const payload = (await response.json()) as { data?: OrderResponse };
     if (!payload.data) {
+      setPhase("idle");
       setError("Order creation failed.");
       return;
     }
 
+    setPhase("redirecting");
     const paymentResponse = await fetch("/api/payment/initiate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -99,6 +102,7 @@ export default function Page() {
     });
 
     if (!paymentResponse.ok) {
+      setPhase("idle");
       setError("Failed to initiate payment.");
       return;
     }
@@ -108,6 +112,7 @@ export default function Page() {
     };
 
     if (!paymentPayload.data) {
+      setPhase("idle");
       setError("Payment initialization failed.");
       return;
     }
@@ -132,7 +137,15 @@ export default function Page() {
   };
 
   return (
-    <main className={`${sora.className} min-h-screen bg-[#f6f8fb]`}>
+    <main className={`${sora.className} min-h-screen bg-[#f6f8fb] relative`}>
+      {phase === "redirecting" && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-white/80 backdrop-blur-sm">
+          <Loader2 className="h-10 w-10 animate-spin text-[#0b2447]" />
+          <p className="text-sm font-semibold text-slate-800">Redirecting to eSewa...</p>
+          <p className="text-xs text-slate-500">Please don't close this window.</p>
+        </div>
+      )}
+
       <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:py-8">
         <div className="mb-6 flex items-center justify-between">
           <button
@@ -250,9 +263,9 @@ export default function Page() {
               className="mt-4 w-full rounded-lg bg-[#0b2447] py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               onClick={handleSubmit}
               type="button"
-              disabled={loading}
+              disabled={phase !== "idle" || items.length === 0}
             >
-              {loading ? "Creating order..." : "Pay with eSewa"}
+              {phase === "creating" ? "Creating order..." : phase === "redirecting" ? "Connecting to eSewa..." : "Pay with eSewa"}
             </button>
           </aside>
         </div>

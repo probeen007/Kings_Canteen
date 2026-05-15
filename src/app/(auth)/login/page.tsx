@@ -135,7 +135,7 @@ export default function Page() {
           <div>
             <label className="text-sm font-medium text-neutral-700">Email</label>
             <input
-              className="mt-2 w-full rounded-lg border border-neutral-200 px-3 py-2 text-base focus:border-neutral-900 focus:outline-none disabled:opacity-60"
+              className="mt-2 w-full rounded-lg border border-neutral-200 px-3 py-2 text-base text-neutral-900 focus:border-neutral-900 focus:outline-none disabled:opacity-60"
               type="email"
               autoComplete="email"
               value={email}
@@ -148,7 +148,7 @@ export default function Page() {
           <div>
             <label className="text-sm font-medium text-neutral-700">Password</label>
             <input
-              className="mt-2 w-full rounded-lg border border-neutral-200 px-3 py-2 text-base focus:border-neutral-900 focus:outline-none disabled:opacity-60"
+              className="mt-2 w-full rounded-lg border border-neutral-200 px-3 py-2 text-base text-neutral-900 focus:border-neutral-900 focus:outline-none disabled:opacity-60"
               type="password"
               autoComplete="current-password"
               value={password}

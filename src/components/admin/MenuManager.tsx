@@ -181,8 +181,10 @@ export function MenuManager({ categories }: Props) {
     }
   };
 
-  const deleteCategory = async (id: string) => {
-    await callApi(`/api/admin/menu/categories/${id}`, "DELETE");
+  const toggleCategoryAvailability = async (category: Category) => {
+    await callApi(`/api/admin/menu/categories/${category.id}`, "PUT", {
+      isActive: !category.isActive,
+    });
     refresh();
   };
 
@@ -326,10 +328,10 @@ export function MenuManager({ categories }: Props) {
               </div>
               <button
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
-                onClick={() => deleteCategory(category.id)}
+                onClick={() => toggleCategoryAvailability(category)}
                 type="button"
               >
-                Hide category
+                {category.isActive ? "Hide category" : "Unhide category"}
               </button>
             </div>
 
@@ -348,18 +350,11 @@ export function MenuManager({ categories }: Props) {
                   <p className="mt-2 text-sm leading-6 text-slate-600">{item.description ?? "No description"}</p>
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                     <button
-                      className="w-full rounded-xl bg-[#5b3418] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#4a2a14] sm:w-auto"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
                       onClick={() => toggleItemAvailability(item)}
                       type="button"
                     >
-                      Toggle
-                    </button>
-                    <button
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white sm:w-auto"
-                      onClick={() => deleteItem(item.id)}
-                      type="button"
-                    >
-                      Hide item
+                      {item.isAvailable ? "Hide item" : "Unhide item"}
                     </button>
                   </div>
                 </article>

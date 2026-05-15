@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 
 import { useCart } from "@/hooks/useCart";
@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ChevronRight,
   UtensilsCrossed,
+  Loader2,
 } from "lucide-react";
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -61,6 +62,8 @@ function SkeletonCard() {
 // ── To-Be-Received card ───────────────────────────────────────────────────────
 
 function PendingPickupCard({ order, onReorder }: { order: Order; onReorder: (o: Order) => void }) {
+  const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
   const pickupDate = new Date(order.pickupTime);
   const isReady = order.status === "READY";
 
@@ -113,13 +116,21 @@ function PendingPickupCard({ order, onReorder }: { order: Order; onReorder: (o: 
 
         {/* Actions */}
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Link
-            href={`/token/${order.id}`}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 active:scale-95 transition-all"
+          <button
+            onClick={() => {
+              setIsNavigating(true);
+              router.push(`/token/${order.id}`);
+            }}
+            disabled={isNavigating}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <QrCode className="h-4 w-4" />
-            Show QR / Token
-          </Link>
+            {isNavigating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <QrCode className="h-4 w-4" />
+            )}
+            {isNavigating ? "Loading..." : "Show QR / Token"}
+          </button>
           <button
             onClick={() => onReorder(order)}
             className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
@@ -200,6 +211,7 @@ function OrdersPageContent() {
   const { addItem } = useCart();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [navigatingToMenu, setNavigatingToMenu] = useState(false);
 
   useEffect(() => {
     router.prefetch("/menu");
@@ -265,12 +277,17 @@ function OrdersPageContent() {
             >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </button>
-            <Link
-              href="/menu"
-              className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors"
+            <button
+              onClick={() => {
+                setNavigatingToMenu(true);
+                router.push("/menu");
+              }}
+              disabled={navigatingToMenu}
+              className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <UtensilsCrossed className="h-3.5 w-3.5" /> Menu
-            </Link>
+              {navigatingToMenu ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UtensilsCrossed className="h-3.5 w-3.5" />}
+              {navigatingToMenu ? "Loading..." : "Menu"}
+            </button>
           </div>
         </header>
 
@@ -316,9 +333,17 @@ function OrdersPageContent() {
                   title="No pending pickups"
                   body="Orders you've paid for but haven't collected yet will appear here."
                   cta={
-                    <Link href="/menu" className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
-                      <UtensilsCrossed className="h-4 w-4" /> Browse Menu
-                    </Link>
+                    <button
+                      onClick={() => {
+                        setNavigatingToMenu(true);
+                        router.push("/menu");
+                      }}
+                      disabled={navigatingToMenu}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {navigatingToMenu ? <Loader2 className="h-4 w-4 animate-spin" /> : <UtensilsCrossed className="h-4 w-4" />}
+                      {navigatingToMenu ? "Loading..." : "Browse Menu"}
+                    </button>
                   }
                 />
               ) : (

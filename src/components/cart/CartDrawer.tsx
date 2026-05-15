@@ -57,7 +57,9 @@ export function CartDrawer() {
         <CartSummary
           totalItems={totalItems}
           totalAmount={totalAmount}
+          disabled={items.length === 0}
           onCheckout={() => {
+            if (items.length === 0) return;
             setOpen(false);
             router.push("/checkout");
           }}
