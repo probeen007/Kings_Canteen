@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { format } from "date-fns";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+export const metadata: Metadata = {
+  title: "Admin Orders",
+};
 
 function ErrorState({ title, message }: { title: string; message: string }) {
   return (

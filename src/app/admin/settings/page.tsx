@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
+
+export const metadata: Metadata = {
+  title: "Settings",
+};
 
 function ErrorState({ title, message }: { title: string; message: string }) {
   return (

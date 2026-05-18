@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MenuManager } from "@/components/admin/MenuManager";
+
+export const metadata: Metadata = {
+  title: "Menu Manager",
+};
 
 function ErrorState({ title, message }: { title: string; message: string }) {
   return (

@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { BarChart, Users, ShoppingCart, TrendingUp } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Admin Dashboard",
+};
 
 const STATS_CACHE_KEY = "admin:stats:today:v1";
 const STATS_CACHE_TTL = 30;
